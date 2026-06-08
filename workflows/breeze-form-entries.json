@@ -1,0 +1,223 @@
+{
+  "name": "Breeze - Form Entries",
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "id": "70b6e197-cfcb-452a-bf71-caa3de0bf65f",
+      "name": "Setup Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        40
+      ],
+      "parameters": {
+        "width": 460,
+        "height": 260,
+        "content": "## Breeze \u2192 Form Entries\n\n**Setup**\n1. Create an *HTTP Header Auth* credential named **Breeze Api-Key** \u2014 Name: `Api-Key`, Value: your Breeze API key. Attach it to both HTTP Request nodes.\n2. In the **Config** node set your `subdomain` and the `formId` (from the form's URL or the Forms list).\n\n**Flow:** Config \u2192 list fields \u2192 list entries \u2192 auto-detect the notes/free-text field and flatten every entry into one row per submission."
+      }
+    },
+    {
+      "id": "68154b0f-933a-4518-987e-92f6fc88068d",
+      "name": "When clicking Test",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        360
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "d7a9516b-e7b5-4b1d-b0b8-2bf44d17b71a",
+      "name": "Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -160,
+        560
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "34f26aff-3332-44e7-96e9-dcedc7b75848",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        80,
+        460
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "subdomain",
+              "value": "graceresurrection",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "formId",
+              "value": "REPLACE_WITH_FORM_ID",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "78cc1cd2-0209-4158-9ccc-1ad9efd8afe4",
+      "name": "List Form Fields",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        300,
+        460
+      ],
+      "parameters": {
+        "url": "=https://{{ $('Config').item.json.subdomain }}.breezechms.com/api/forms/list_form_fields",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "form_id",
+              "value": "={{ $('Config').item.json.formId }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_CREDENTIAL_ID",
+          "name": "Breeze Api-Key"
+        }
+      }
+    },
+    {
+      "id": "eb23c995-768a-4f59-94b6-ef6089c35496",
+      "name": "List Form Entries",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        460
+      ],
+      "parameters": {
+        "url": "=https://{{ $('Config').item.json.subdomain }}.breezechms.com/api/forms/list_form_entries",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "form_id",
+              "value": "={{ $('Config').item.json.formId }}"
+            },
+            {
+              "name": "details",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_CREDENTIAL_ID",
+          "name": "Breeze Api-Key"
+        }
+      }
+    },
+    {
+      "id": "171a22a7-52ce-4f1f-8580-5744d2c5f3ce",
+      "name": "Flatten Entries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        740,
+        460
+      ],
+      "parameters": {
+        "jsCode": "// Flatten Breeze form entries and auto-detect the notes / free-text field.\n//\n// Inputs:\n//   - $('List Form Fields')  -> field definitions for the form\n//   - $input (this node)     -> the raw entries from \"List Form Entries\"\n//\n// Breeze returns bare JSON arrays. Depending on n8n settings the array may\n// arrive as one item (json = array) or split into one item per element, so\n// we normalise both shapes here.\n\nconst FREE_TEXT_TYPES = ['single_line', 'multiple_lines', 'textarea', 'paragraph'];\nconst NOTES_NAME_RE = /note|comment|message|prayer|question|request|detail/i;\n\nfunction asArray(value) {\n  if (Array.isArray(value)) return value;\n  if (value && Array.isArray(value.data)) return value.data;\n  if (value && typeof value === 'object') return [value];\n  return [];\n}\n\nfunction flattenValue(v) {\n  if (v === null || v === undefined) return '';\n  if (typeof v === 'object') {\n    // Breeze sometimes returns structured values (e.g. name -> {first,last}).\n    if ('value' in v) return v.value;\n    return Object.values(v).filter(Boolean).join(' ').trim();\n  }\n  return v;\n}\n\n// ---- 1. Resolve field definitions ----------------------------------------\nlet fieldList = [];\ntry {\n  fieldList = asArray($('List Form Fields').first().json);\n} catch (e) {\n  // node may have a different name if renamed; fail loud and clear\n  throw new Error('Could not read \"List Form Fields\" output: ' + e.message);\n}\n\nconst idToName = {};\nfor (const f of fieldList) {\n  if (f && f.id !== undefined) idToName[String(f.id)] = f.name || ('field_' + f.id);\n}\n\n// Prefer a field whose NAME looks like a notes box; fall back to first\n// free-text field type.\nlet notesField =\n  fieldList.find((f) => f && NOTES_NAME_RE.test(f.name || '')) ||\n  fieldList.find((f) => f && FREE_TEXT_TYPES.includes(f.type)) ||\n  null;\nconst notesFieldId = notesField ? String(notesField.id) : null;\n\n// ---- 2. Flatten entries ---------------------------------------------------\nconst out = [];\nfor (const item of $input.all()) {\n  for (const entry of asArray(item.json)) {\n    const resp = entry.response || entry.details || entry.fields || {};\n    const row = {\n      entry_id: entry.id ?? null,\n      created_on: entry.created_on ?? entry.created ?? null,\n      person_id: entry.person_id ?? null,\n      notes_field_id: notesFieldId,\n      notes: notesFieldId ? flattenValue(resp[notesFieldId]) : null,\n    };\n    // Also expose every answered field by its human-readable name.\n    for (const [fid, val] of Object.entries(resp)) {\n      const key = idToName[fid] || ('field_' + fid);\n      row[key] = flattenValue(val);\n    }\n    out.push({ json: row });\n  }\n}\n\nreturn out;\n"
+      }
+    }
+  ],
+  "connections": {
+    "When clicking Test": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "List Form Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Form Fields": {
+      "main": [
+        [
+          {
+            "node": "List Form Entries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Form Entries": {
+      "main": [
+        [
+          {
+            "node": "Flatten Entries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
