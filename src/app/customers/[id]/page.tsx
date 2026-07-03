@@ -5,6 +5,7 @@ import { AddNoteForm } from "@/components/forms/AddNoteForm";
 import { LogConversationForm } from "@/components/forms/LogConversationForm";
 import { ReminderActions } from "@/components/forms/ReminderActions";
 import { DeleteButton } from "@/components/forms/DeleteButton";
+import { CustomerStatusSelect } from "@/components/forms/CustomerStatusSelect";
 import { customerRepository } from "@/lib/repositories/customer.repository";
 import { formatCents } from "@/lib/money";
 import { NotFoundError } from "@/lib/errors";
@@ -29,7 +30,7 @@ export default async function CustomerDetailPage({ params }: PageProps) {
         <div>
           <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">{customer.name}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-            <Badge tone="info">{customer.status}</Badge>
+            <CustomerStatusSelect customerId={customer.id} status={customer.status} />
             {customer.tags.map((t) => (
               <Badge key={t.tagId}>{t.tag.name}</Badge>
             ))}

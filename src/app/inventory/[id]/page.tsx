@@ -4,6 +4,7 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { RecordSaleForm } from "@/components/forms/RecordSaleForm";
 import { DeleteButton } from "@/components/forms/DeleteButton";
+import { MarkListedButton } from "@/components/forms/MarkListedButton";
 import { inventoryRepository } from "@/lib/repositories/inventory.repository";
 import { matchRepository } from "@/lib/repositories/match.repository";
 import { customerRepository } from "@/lib/repositories/customer.repository";
@@ -46,11 +47,14 @@ export default async function InventoryDetailPage({ params }: PageProps) {
             )}
           </div>
         </div>
-        <DeleteButton
-          url={`/api/inventory/${item.id}`}
-          redirectTo="/inventory"
-          confirmMessage={`Delete "${item.title}"? This removes its match suggestions too.`}
-        />
+        <div className="flex shrink-0 gap-2">
+          {item.status === "acquired" && <MarkListedButton itemId={item.id} />}
+          <DeleteButton
+            url={`/api/inventory/${item.id}`}
+            redirectTo="/inventory"
+            confirmMessage={`Delete "${item.title}"? This removes its match suggestions too.`}
+          />
+        </div>
       </div>
 
       {item.description && <p className="text-sm text-slate-700 dark:text-slate-300">{item.description}</p>}
