@@ -29,6 +29,15 @@ the AI assistant, and the AI Chief of Staff briefing works without it —
 those return a `503` (or, for the briefing, a plain rule-based summary
 instead of prose) if it's missing.
 
+### Access control
+
+Founder OS has no per-user login system (single-founder by design). Before
+deploying to a public URL, set `SITE_PASSWORD` — `src/middleware.ts` puts a
+simple HTTP Basic Auth gate in front of every page and API route except
+`/api/health` and `/api/webhooks/n8n` (which already carries its own
+`N8N_WEBHOOK_SECRET`). Leave `SITE_PASSWORD` unset for local dev; the gate is
+a no-op when it's not set.
+
 ### Scripts
 
 | Command | Does |
