@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored Ruflo harness scripts (CommonJS, not app source).
+    ".claude/**",
+    ".claude-flow/**",
   ]),
 ]);
 
