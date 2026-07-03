@@ -1,11 +1,20 @@
-// Marketplace CRM — Prisma schema
+// Founder OS — Prisma schema
 //
-// Provider is SQLite for local development. Every modeling choice here is
-// deliberately chosen to be Postgres-compatible so swapping the datasource
-// provider (and DATABASE_URL) is the only change needed to move to
-// Postgres/Supabase in production. See docs/decisions for the reasoning
-// behind the non-obvious choices (no native enums, money as integer cents,
-// derived values not stored, etc).
+// Founder OS is a Core (Contacts, Tasks, Calendar, Documents, AI Memory,
+// Finance, Notifications) shared across pluggable business modules.
+// "People exist once, businesses attach to people": Contact is the one
+// universal person record; each module attaches its own extension
+// table(s) to a Contact rather than each module keeping its own contact
+// list. See docs/decisions/0012-core-module-schema-boundary.md for the
+// Core/module boundary rule this schema follows (Core never holds a typed
+// relation *into* a module's business logic — only the reverse).
+//
+// Provider is SQLite for local dev; every modeling choice here is
+// deliberately Postgres-compatible (see docs/decisions/0007). No native
+// Prisma enums (unsupported on SQLite) — see docs/decisions/0003; every
+// "enum-like" field below is a validated string, with the allowed values
+// living in a single `enums.ts` per layer (src/core/constants/enums.ts,
+// src/modules/marketplace/constants/enums.ts).
 
 generator client {
   provider = "prisma-client"
@@ -16,175 +25,339 @@ datasource db {
   provider = "sqlite"
 }
 
-// ---------------------------------------------------------------------------
-// Customers
-// ---------------------------------------------------------------------------
+// =============================================================================
+// CORE
+// =============================================================================
 
-/// A person the seller has interacted with on Marketplace: a buyer, a
-/// prospect who never converted, or someone the seller has sold to before.
-model Customer {
-  id String @id @default(cuid())
-
-  name               String
-  facebookProfileUrl String? @unique
-  messengerThreadId  String? @unique
-  phone              String?
-  email              String?
-
-  /// One of CUSTOMER_STATUSES (src/lib/constants/enums.ts). Not a native
-  /// Prisma enum — see docs/decisions/0003-no-native-enums-on-sqlite.md.
-  status String @default("prospect")
-
-  /// AI-maintained rolling summary of who this person is and what they care
-  /// about, refreshed as new conversations come in.
-  aiSummary String?
-
-  /// 0-100. Starts neutral and moves with confirmed sales vs. no-shows/flakes.
-  reliabilityScore Float @default(50)
-
-  /// 0-100. How quickly this customer tends to reply once contacted. Seeded
-  /// at a neutral value; intended to be refined once message-level timing
-  /// data is available (e.g. via the n8n Messenger integration).
-  responsivenessScore Float @default(50)
-
-  lastContactAt DateTime?
-
-  /// Denormalized counters, kept in sync by ordersService whenever a sale is
-  /// recorded. Safe to recompute from InventoryItem rows if they ever drift.
-  totalPurchases     Int @default(0)
-  lifetimeSpendCents Int @default(0)
-
+/// Single seeded row representing the founder. Not yet wired to any
+/// ownerId/founderId FK elsewhere — this is single-founder software today.
+/// Kept as a real table (rather than a hardcoded name) so real multi-user
+/// auth can be bolted on later without a schema rewrite: add `founderId`
+/// columns pointing here, default-backfilled to this row's id.
+model Founder {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+}
 
-  tags          CustomerTag[]
-  notes         Note[]
-  conversations Conversation[]
-  interests     CustomerInterest[]
-  reminders     FollowUpReminder[]
-  purchases     InventoryItem[]    @relation("CustomerPurchases")
-  matches       MatchSuggestion[]
+/// The universal person record. A Contact may simultaneously be a
+/// Marketplace buyer, a Lawn Care client, a newsletter subscriber, etc. —
+/// module extension tables (MarketplaceProfile, LawnCareClient, ...) each
+/// FK back to a Contact; Contact is never duplicated per module.
+model Contact {
+  id                 String    @id @default(cuid())
+  name               String
+  email              String?
+  phone              String?
+  facebookProfileUrl String?   @unique
+  messengerThreadId  String?   @unique
+  /// One of PREFERRED_CHANNELS (src/core/constants/enums.ts).
+  preferredChannel   String?
+  lastContactAt      DateTime?
+  /// Disposable read-optimization cache of the most recent AI-generated
+  /// summary — NOT the source of truth. The durable, never-overwritten
+  /// history lives in ContactMemoryEntry. See
+  /// docs/decisions/0009-ai-memory-append-only-log.md.
+  aiSummaryCache     String?
+  /// No `@default("{}")` here: Prisma 7's SQLite codegen emits an unquoted
+  /// `DEFAULT {}`/`DEFAULT []` for Json field defaults, which SQLite
+  /// rejects (object literals) or silently mis-parses (array literals, via
+  /// SQLite's `[identifier]` bracket-quoting syntax). Every Json field in
+  /// this schema omits `@default` for that reason — the repository layer
+  /// always supplies an explicit value on create instead.
+  customFields       Json
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  @@index([status])
+  tags           ContactTag[]
+  notes          Note[]
+  tasks          Task[]
+  financeEntries FinanceTransaction[]
+  memoryEntries  ContactMemoryEntry[]
+  calendarEvents CalendarEvent[]
+  documents      Document[]
+  notifications  Notification[]
+
+  // Module extension tables. These back-relation fields are required by
+  // Prisma's single-schema-file relation rules (a relation must be
+  // declared on both models) — they are NOT a code-level dependency: no
+  // Core repository or service ever reads these fields, only the owning
+  // module's own repositories do. See docs/decisions/0012.
+  marketplaceProfile      MarketplaceProfile?
+  marketplacePurchases    MarketplaceItem[]
+  marketplaceConversations MarketplaceConversation[]
+  marketplaceInterests    MarketplaceInterest[]
+  marketplaceMatches      MarketplaceMatch[]
+  lawnCareClient          LawnCareClient?
+  publishingProjects      PublishingProject[]
+  gameStudioProjects      GameStudioProject[]
+  aiProductProjects       AiProductProject[]
+  churchProjects          ChurchProject[]
+
   @@index([lastContactAt])
 }
 
 model Tag {
-  id   String @id @default(cuid())
-  name String @unique
+  id        String        @id @default(cuid())
+  name      String        @unique
+  contacts  ContactTag[]
+  createdAt DateTime      @default(now())
+}
 
-  customers CustomerTag[]
-
+/// Explicit join model (rather than an implicit m:n) so we can audit when
+/// a tag was applied and query the join table directly.
+model ContactTag {
+  contactId String
+  tagId     String
   createdAt DateTime @default(now())
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, tagId])
 }
 
-/// Explicit join model (rather than an implicit m:n) so we can order tags,
-/// audit when they were applied, and query the join table directly.
-model CustomerTag {
-  customerId String
-  tagId      String
-  createdAt  DateTime @default(now())
-
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  tag      Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
-
-  @@id([customerId, tagId])
-}
-
-/// Freeform, timestamped notes a seller leaves on a customer. Modeled as its
-/// own table (not a single text column) so history is preserved as notes
-/// accumulate over years of Marketplace activity.
+/// Freeform, timestamped notes on a contact. Its own table (not a single
+/// text column) so history is preserved as notes accumulate over time.
 model Note {
-  id         String   @id @default(cuid())
-  customerId String
-  body       String
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  contactId String
+  body      String
+  createdAt DateTime @default(now())
 
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
-  @@index([customerId])
+  @@index([contactId])
 }
 
-// ---------------------------------------------------------------------------
-// Inventory
-// ---------------------------------------------------------------------------
+/// The universal task system. A task belongs to the Founder (module and
+/// contactId both null), to a Module (module set, contactId null — e.g.
+/// "Fix inventory bug"), or to a Contact (contactId set — e.g. "Call lawn
+/// customer"). `sourceType`/`sourceId` are untyped references (not a
+/// relation) back to whatever produced the task, per the Core/module
+/// boundary rule: Core never holds a typed FK into a module's own tables.
+model Task {
+  id          String    @id @default(cuid())
+  title       String
+  notes       String?
+  dueAt       DateTime?
+  /// One of TASK_STATUSES.
+  status      String    @default("pending")
+  /// One of TASK_PRIORITIES.
+  priority    String    @default("normal")
+  /// One of MODULE_IDS, or null for a founder-level task.
+  module      String?
+  contactId   String?
+  sourceType  String?
+  sourceId    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
 
-/// A product category. Normalized (rather than a free string) so the
-/// matching engine can do exact category joins instead of fuzzy string
-/// comparison, and so category names can be renamed in one place.
-model Category {
+  contact Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([dueAt])
+  @@index([module])
+  @@index([contactId])
+}
+
+/// The single source of truth for money in/out across every module —
+/// income, expenses, profit, revenue-by-module, revenue-over-time, and
+/// lifetime-customer-value are all aggregates computed from this ledger at
+/// read time, never denormalized counters. See
+/// docs/decisions/0011-finance-ledger-over-counters.md, which extends the
+/// same "derive, don't store what can drift" precedent already established
+/// for per-item profit (docs/decisions/0002-money-as-integer-cents.md).
+model FinanceTransaction {
+  id          String   @id @default(cuid())
+  /// One of FINANCE_TRANSACTION_TYPES.
+  type        String
+  amountCents Int
+  category    String?
+  /// One of MODULE_IDS, or null for a founder-level transaction (e.g. a
+  /// software subscription not attributable to one module).
+  module      String?
+  contactId   String?
+  description String?
+  occurredAt  DateTime @default(now())
+  /// Manually flagged — there is no recurrence/scheduling engine yet.
+  recurring   Boolean  @default(false)
+  sourceType  String?
+  sourceId    String?
+  createdAt   DateTime @default(now())
+
+  contact Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([type])
+  @@index([module])
+  @@index([contactId])
+  @@index([occurredAt])
+}
+
+/// Append-only AI memory. Never updated or overwritten — the repository
+/// only ever exposes `create`/`listByContact`. `module` null means a
+/// universal fact about the person ("owns two dogs"); set means a
+/// module-specific fact ("bought a KitchenAid mixer"). See
+/// docs/decisions/0009-ai-memory-append-only-log.md.
+model ContactMemoryEntry {
+  id         String   @id @default(cuid())
+  contactId  String
+  /// One of MODULE_IDS, or null for a universal fact.
+  module     String?
+  /// One of MEMORY_KINDS.
+  kind       String
+  content    String
+  sourceType String?
+  sourceId   String?
+  createdAt  DateTime @default(now())
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId])
+  @@index([contactId, module])
+}
+
+/// Thin Core scaffolding — a shared shape any module can write into
+/// (e.g. Publishing's newsletter schedule, Lawn Care's next visit) without
+/// each module needing its own calendar table. No dedicated calendar UI
+/// yet, just enough to back the dashboard's "Upcoming Deadlines".
+model CalendarEvent {
+  id        String    @id @default(cuid())
+  title     String
+  startsAt  DateTime
+  endsAt    DateTime?
+  module    String?
+  contactId String?
+  notes     String?
+  createdAt DateTime  @default(now())
+
+  contact Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([startsAt])
+  @@index([module])
+}
+
+/// Thin Core scaffolding for document/file metadata. No upload
+/// infrastructure yet (no blob storage wired up) — `url` is a plain string
+/// for now (an external link, or a future storage key).
+model Document {
+  id        String   @id @default(cuid())
+  title     String
+  url       String?
+  module    String?
+  contactId String?
+  createdAt DateTime @default(now())
+
+  contact Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([module])
+  @@index([contactId])
+}
+
+/// Thin Core scaffolding for an in-app notification feed. No push/email
+/// delivery — just a readable/unread row a dashboard section can list.
+model Notification {
+  id        String    @id @default(cuid())
+  message   String
+  module    String?
+  contactId String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  contact Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([readAt])
+  @@index([module])
+}
+
+// =============================================================================
+// MARKETPLACE MODULE (full depth — the flagship module)
+// =============================================================================
+
+/// Marketplace-specific extension of a Contact. Reliability/responsiveness
+/// live here rather than on Contact because "does this person follow
+/// through on a Marketplace deal" is a module-specific signal, not a
+/// universal trait of the person — a different module might score
+/// reliability completely differently (e.g. "shows up for a scheduled
+/// appointment").
+model MarketplaceProfile {
+  contactId           String   @id
+  /// One of MARKETPLACE_PROFILE_STATUSES: prospect|buyer|seller.
+  status              String   @default("prospect")
+  reliabilityScore    Float    @default(50)
+  responsivenessScore Float    @default(50)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+}
+
+model MarketplaceCategory {
   id   String @id @default(cuid())
   name String @unique
 
-  items     InventoryItem[]
-  interests CustomerInterest[]
+  items     MarketplaceItem[]
+  interests MarketplaceInterest[]
 
   createdAt DateTime @default(now())
 }
 
-model InventoryItem {
+model MarketplaceItem {
   id String @id @default(cuid())
 
   title       String
   description String?
   categoryId  String?
 
-  acquisitionSource     String?
-  acquisitionCostCents  Int?
-  askingPriceCents      Int?
-  salePriceCents        Int?
-  marketplaceUrl        String?
+  acquisitionSource    String?
+  acquisitionCostCents Int?
+  askingPriceCents     Int?
+  salePriceCents       Int?
+  marketplaceUrl       String?
 
   dateListed DateTime?
   dateSold   DateTime?
-  buyerId    String?
+  contactId  String?
 
-  /// One of INVENTORY_STATUSES. See docs/decisions/0003.
+  /// One of INVENTORY_STATUSES.
   status String @default("acquired")
 
   /// Keyword bag used by the matching engine to compare this item against
-  /// open CustomerInterest rows (title/description tokens, plus anything an
-  /// AI extraction pass adds). Stored as JSON array of strings.
-  keywords Json @default("[]")
+  /// open MarketplaceInterest rows. Stored as a JSON array of strings.
+  keywords Json
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  category Category?         @relation(fields: [categoryId], references: [id])
-  buyer    Customer?         @relation("CustomerPurchases", fields: [buyerId], references: [id])
-  matches  MatchSuggestion[]
+  category MarketplaceCategory? @relation(fields: [categoryId], references: [id])
+  contact  Contact?             @relation(fields: [contactId], references: [id])
+  matches  MarketplaceMatch[]
 
   // Deliberately no stored `profit` column: profit is
-  // salePriceCents - acquisitionCostCents, derived at read time in
-  // src/lib/services/inventory.service.ts so it can never drift from its
-  // inputs. See docs/decisions/0002-money-as-integer-cents.md.
+  // salePriceCents - acquisitionCostCents, derived at read time. See
+  // docs/decisions/0002-money-as-integer-cents.md.
 
   @@index([status])
   @@index([categoryId])
   @@index([dateListed])
 }
 
-// ---------------------------------------------------------------------------
-// Conversation intelligence
-// ---------------------------------------------------------------------------
-
-/// One ingested chunk of conversation (typically a Messenger thread excerpt
-/// forwarded by the n8n automation). Raw text is retained for audit, but
-/// every feature in the app reads the structured columns below, never the
-/// raw text or the raw AI response — see
-/// docs/decisions/0005-ai-extraction-structured-storage.md.
-model Conversation {
-  id         String @id @default(cuid())
-  customerId String
+/// One ingested Messenger conversation excerpt. Raw text is retained for
+/// audit, but every feature reads the structured columns below, never the
+/// raw text. See docs/decisions/0005-ai-extraction-structured-storage.md.
+model MarketplaceConversation {
+  id        String @id @default(cuid())
+  contactId String
 
   /// One of CONVERSATION_SOURCES.
   source     String   @default("messenger")
   rawText    String
   occurredAt DateTime @default(now())
 
-  // --- structured extraction (source of truth for app logic) ---
   interestedItem  String?
-  requestedItems  Json    @default("[]")
+  requestedItems  Json
   budgetCents     Int?
   budgetNote      String?
   /// One of URGENCY_LEVELS.
@@ -196,33 +369,28 @@ model Conversation {
   sentiment       String?
   summary         String?
 
-  /// Which extraction model/version produced the structured fields above,
-  /// for auditability when we tune prompts later.
   extractionModel String?
-  /// Raw AI response, retained only for debugging the extraction pipeline.
   extractionRaw   Json?
 
   createdAt DateTime @default(now())
 
-  customer  Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  interests CustomerInterest[]
-  reminders FollowUpReminder[]
+  contact   Contact               @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  interests MarketplaceInterest[]
 
-  @@index([customerId])
+  @@index([contactId])
   @@index([occurredAt])
 }
 
-/// A single "wants this kind of thing" signal for a customer, extracted from
-/// a conversation (or entered manually). This is what the matching engine
-/// scans whenever new inventory comes in.
-model CustomerInterest {
+/// A single "wants this kind of thing" signal, feeding the matching
+/// engine.
+model MarketplaceInterest {
   id             String  @id @default(cuid())
-  customerId     String
+  contactId      String
   conversationId String?
   categoryId     String?
 
   itemDescription String
-  keywords        Json    @default("[]")
+  keywords        Json
   budgetCents     Int?
 
   /// One of INTEREST_STATUSES.
@@ -231,53 +399,23 @@ model CustomerInterest {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
-  category     Category?     @relation(fields: [categoryId], references: [id])
+  contact      Contact                  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  conversation MarketplaceConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  category     MarketplaceCategory?     @relation(fields: [categoryId], references: [id])
 
   @@index([status])
   @@index([categoryId])
-  @@index([customerId])
+  @@index([contactId])
 }
 
-model FollowUpReminder {
-  id             String  @id @default(cuid())
-  customerId     String
-  conversationId String?
+/// A persisted "contact this person about this item" recommendation from
+/// the matching engine.
+model MarketplaceMatch {
+  id                String @id @default(cuid())
+  marketplaceItemId String
+  contactId         String
 
-  dueAt DateTime
-  note  String
-
-  /// One of REMINDER_STATUSES.
-  status String @default("pending")
-
-  createdAt DateTime @default(now())
-
-  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
-
-  @@index([status])
-  @@index([dueAt])
-}
-
-// ---------------------------------------------------------------------------
-// Matching engine output
-// ---------------------------------------------------------------------------
-
-/// A persisted "you should contact this person about this item"
-/// recommendation, produced by the matching engine whenever inventory is
-/// added. Persisting (rather than recomputing on every dashboard load) lets
-/// us track which suggestions were acted on.
-model MatchSuggestion {
-  id              String @id @default(cuid())
-  inventoryItemId String
-  customerId      String
-
-  /// 0-100 overall score.
-  score Float
-  /// Named sub-scores + human-readable reasons, e.g.
-  /// { similarity: 82, buyingHistory: 40, recency: 90, responsiveness: 60,
-  ///   reliability: 75, reasons: ["Bought a similar espresso machine in Feb"] }
+  score     Float
   breakdown Json
 
   /// One of MATCH_STATUSES.
@@ -285,10 +423,87 @@ model MatchSuggestion {
 
   createdAt DateTime @default(now())
 
-  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
-  customer      Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  item    MarketplaceItem @relation(fields: [marketplaceItemId], references: [id], onDelete: Cascade)
+  contact Contact         @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
-  @@unique([inventoryItemId, customerId])
+  @@unique([marketplaceItemId, contactId])
   @@index([status])
   @@index([score])
+}
+
+// =============================================================================
+// STUB MODULES
+//
+// Each is deliberately minimal — enough to prove a module can own its own
+// table and appear in nav/dashboard/assistant without touching Core, not a
+// fully-fleshed-out feature set. Fields will grow when a module is
+// actually built out.
+// =============================================================================
+
+model LawnCareClient {
+  id              String    @id @default(cuid())
+  contactId       String    @unique
+  propertyAddress String
+  serviceFrequency String?
+  nextServiceAt   DateTime?
+  notes           String?
+  createdAt       DateTime  @default(now())
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId])
+}
+
+model PublishingProject {
+  id          String    @id @default(cuid())
+  title       String
+  contactId   String?
+  status      String    @default("drafting")
+  platform    String?
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  contact Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+}
+
+model GameStudioProject {
+  id        String   @id @default(cuid())
+  title     String
+  contactId String?
+  status    String   @default("concept")
+  notes     String?
+  createdAt DateTime @default(now())
+
+  contact Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+}
+
+model AiProductProject {
+  id        String   @id @default(cuid())
+  name      String
+  contactId String?
+  status    String   @default("idea")
+  notes     String?
+  createdAt DateTime @default(now())
+
+  contact Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+}
+
+model ChurchProject {
+  id        String    @id @default(cuid())
+  title     String
+  contactId String?
+  status    String    @default("planning")
+  dueAt     DateTime?
+  notes     String?
+  createdAt DateTime  @default(now())
+
+  contact Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([status])
 }

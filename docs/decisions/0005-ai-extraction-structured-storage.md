@@ -1,5 +1,16 @@
 # 0005 — Conversation extraction: structured storage, AI output is not the source of truth
 
+> **Update (Founder OS refactor):** `src/lib/ai/extraction.ts` and
+> `src/lib/validation/extraction.ts` moved to
+> `src/modules/marketplace/ai/extraction.ts` and
+> `src/modules/marketplace/validation/extraction.ts`; `Conversation`/
+> `CustomerInterest`/`FollowUpReminder`/`Customer` are now
+> `MarketplaceConversation`/`MarketplaceInterest`/`Task`/`Contact`. The
+> "aiSummary is most recent, not synthesized" simplification below still
+> holds for `Contact.aiSummaryCache` — but every ingested conversation now
+> *also* appends a `ContactMemoryEntry` row, so the full history is never
+> lost even though the cache still only reflects the latest turn. See 0009.
+
 ## Context
 
 The spec: given conversation text, extract interested item, requested

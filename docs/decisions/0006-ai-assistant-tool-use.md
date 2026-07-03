@@ -1,5 +1,16 @@
 # 0006 — AI assistant: tool use over repositories, never generated SQL
 
+> **Update (Founder OS refactor):** the assistant loop now lives at
+> `src/core/ai/assistant.ts` and composes `coreTools` (search_contacts,
+> get_contact_profile, get_contact_finance_summary, get_tasks_due) with
+> `MODULES.flatMap(m => m.assistantTools?.() ?? [])` — every registered
+> module contributes its own tools via its manifest rather than the
+> assistant hardcoding one fixed list. Marketplace's original seven tools
+> moved unchanged (aside from `customerId` → `contactId` renames) into
+> `src/modules/marketplace/manifest.ts`'s `assistantTools()`. `defineTool`
+> itself moved to `src/core/ai/tool.ts` so module manifests can import it
+> without an import cycle through the assistant. See 0010.
+
 ## Context
 
 The spec wants natural-language Q&A: "Who wanted a KitchenAid mixer?",

@@ -1,5 +1,13 @@
 # 0007 — SQLite for dev, Postgres/Supabase migration path
 
+> **Update (Founder OS refactor):** everything below still holds — the
+> Founder OS schema (Core + every module) was written under the same
+> constraints from day one. One addition: Prisma 7's SQLite codegen renders
+> `Json @default(...)` as an unquoted (invalid) SQL literal, so every `Json`
+> column in the new schema omits `@default` and the owning repository
+> supplies an explicit value on `create()` instead — see the comment above
+> `Contact.customFields` in `prisma/schema.prisma`.
+
 ## Context
 
 The spec requires SQLite for development with a clean path to

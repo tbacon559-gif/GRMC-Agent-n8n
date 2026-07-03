@@ -1,5 +1,13 @@
 # 0003 — No native Prisma enums; validated string unions instead
 
+> **Update (Founder OS refactor):** the single `src/lib/constants/enums.ts`
+> described below split into `src/core/constants/enums.ts` (Core: task
+> status/priority, finance transaction type, memory kind, preferred channel,
+> module id) and `src/modules/marketplace/constants/enums.ts` (Marketplace-
+> specific: inventory status, conversation source, urgency, buying intent,
+> sentiment, interest/match status) — one per schema/layer boundary, per
+> 0012. The reasoning below is unchanged.
+
 ## Context
 
 The spec calls for several enum-like fields: customer status, inventory

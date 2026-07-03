@@ -2,15 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/api/handler";
 import { env } from "@/lib/env";
 import { UnauthorizedError } from "@/lib/errors";
-import { customerRepository } from "@/lib/repositories/customer.repository";
-import { ingestConversation } from "@/lib/services/conversation.service";
-import { ingestWebhookConversationSchema } from "@/lib/validation/conversation";
+import { contactRepository } from "@/core/repositories/contact.repository";
+import { ingestConversation } from "@/modules/marketplace/services/marketplace-conversation.service";
+import { ingestWebhookConversationSchema } from "@/modules/marketplace/validation/conversation";
 
 /**
  * Entry point for the n8n Messenger automation (see n8n/workflows/ and
- * docs/decisions/0008-n8n-webhook-contract.md). Unlike POST /api/conversations,
- * this identifies (or creates) the customer by Messenger thread ID, since
- * n8n is often forwarding a brand-new contact the CRM has never seen.
+ * docs/decisions/0008-n8n-webhook-contract.md). This route's path and
+ * request body field names are an external contract the n8n workflow
+ * hardcodes — both are kept unchanged by the Founder OS rebrand (see
+ * docs/decisions/0013-founder-os-rebrand-route-map.md), even though the
+ * customer this creates is now a Core Contact.
  */
 export const POST = withErrorHandling(async (request: NextRequest) => {
   const secret = request.headers.get("x-n8n-webhook-secret");
@@ -19,18 +21,18 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   }
 
   const body = ingestWebhookConversationSchema.parse(await request.json());
-  const customer = await customerRepository.upsertByMessengerThreadId({
+  const contact = await contactRepository.upsertByMessengerThreadId({
     messengerThreadId: body.messengerThreadId,
     name: body.customerName,
     facebookProfileUrl: body.facebookProfileUrl,
   });
 
   const result = await ingestConversation({
-    customerId: customer.id,
+    contactId: contact.id,
     rawText: body.rawText,
     source: "messenger",
     occurredAt: body.occurredAt,
   });
 
-  return NextResponse.json({ customerId: customer.id, ...result }, { status: 201 });
+  return NextResponse.json({ contactId: contact.id, ...result }, { status: 201 });
 });

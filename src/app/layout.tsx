@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Marketplace CRM",
-  description: "AI-powered CRM for Facebook Marketplace sellers",
+  title: "Founder OS",
+  description: "An AI operating system for a solo founder running multiple businesses",
 };
 
 export default function RootLayout({

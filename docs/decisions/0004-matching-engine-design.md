@@ -1,5 +1,16 @@
 # 0004 — Matching engine: deterministic scoring, not a per-match AI call
 
+> **Update (Founder OS refactor):** this file now lives at
+> `src/modules/marketplace/services/matching.service.ts`. `scoreInterest`'s
+> signature changed from `(item, interest, customer, now)` to
+> `(item, interest, scoringContext, now)` — `customer.totalPurchases` no
+> longer exists (see 0011); `buyingHistory` is now computed from a
+> `purchaseCount` passed in via a plain `ContactScoringContext` object,
+> batch-fetched from the Finance ledger. `responsiveness`/`reliability` now
+> come from `MarketplaceProfile`, not `Contact` (see 0012). The scoring
+> formula, weights, and the "similarity > 0 is a hard gate" reasoning below
+> are otherwise unchanged.
+
 ## Context
 
 The core spec feature: whenever inventory is added, find every customer
