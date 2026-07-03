@@ -28,6 +28,7 @@ export function NewInventoryForm() {
         ? Number(form.get("acquisitionCostCents")) * 100
         : undefined,
       askingPriceCents: form.get("askingPriceCents") ? Number(form.get("askingPriceCents")) * 100 : undefined,
+      marketplaceUrl: form.get("marketplaceUrl") || undefined,
       keywords,
     };
 
@@ -72,6 +73,7 @@ export function NewInventoryForm() {
         <Field label="Acquisition source" name="acquisitionSource" />
         <Field label="Acquisition cost ($)" name="acquisitionCostCents" type="number" />
         <Field label="Asking price ($)" name="askingPriceCents" type="number" />
+        <Field label="Marketplace URL" name="marketplaceUrl" placeholder="https://facebook.com/marketplace/item/..." className="col-span-2" />
         <Field
           label="Keywords (comma-separated)"
           name="keywords"

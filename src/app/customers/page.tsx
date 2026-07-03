@@ -24,13 +24,13 @@ export default async function CustomersPage({ searchParams }: PageProps) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Customers</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Every buyer, seller, and prospect you&apos;ve ever talked to.
-          </p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Customers</h1>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          Every buyer, seller, and prospect you&apos;ve ever talked to.
+        </p>
+      </div>
+      <div className="flex justify-end">
         <NewCustomerForm />
       </div>
 

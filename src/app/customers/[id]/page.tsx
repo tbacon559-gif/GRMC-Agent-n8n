@@ -6,6 +6,7 @@ import { LogConversationForm } from "@/components/forms/LogConversationForm";
 import { ReminderActions } from "@/components/forms/ReminderActions";
 import { DeleteButton } from "@/components/forms/DeleteButton";
 import { CustomerStatusSelect } from "@/components/forms/CustomerStatusSelect";
+import { AddTagForm } from "@/components/forms/AddTagForm";
 import { customerRepository } from "@/lib/repositories/customer.repository";
 import { formatCents } from "@/lib/money";
 import { NotFoundError } from "@/lib/errors";
@@ -34,6 +35,7 @@ export default async function CustomerDetailPage({ params }: PageProps) {
             {customer.tags.map((t) => (
               <Badge key={t.tagId}>{t.tag.name}</Badge>
             ))}
+            <AddTagForm customerId={customer.id} existingTags={customer.tags.map((t) => t.tag.name)} />
             {customer.phone && <span>{customer.phone}</span>}
             {customer.email && <span>{customer.email}</span>}
             {customer.facebookProfileUrl && (

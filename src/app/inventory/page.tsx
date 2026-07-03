@@ -33,13 +33,13 @@ export default async function InventoryPage({ searchParams }: PageProps) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Inventory</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Adding an item automatically finds who to contact before you list it.
-          </p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Inventory</h1>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          Adding an item automatically finds who to contact before you list it.
+        </p>
+      </div>
+      <div className="flex justify-end">
         <NewInventoryForm />
       </div>
 
