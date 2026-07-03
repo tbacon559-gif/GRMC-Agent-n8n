@@ -46,7 +46,7 @@ times.
 | Pastoral visit logging | Confirm-first | Keep | — |
 | Pastoral visit booking | Confirm-first | Keep | — |
 | Order of Worship builder | Thu | Keep | Claude-filled, working |
-| **Kids Korner Thursday Confirm** | Weekly | **Retire/fix — live bug** | Named `"...TEMP AUTO-SEND thru 6/27"`; it is now 2026-07-03 and it is still active and auto-sending past its own stated expiry window. Needs immediate review of whether auto-send should still be happening at all, independent of any Taylor OS work. |
+| **Kids Korner Thursday Confirm** | Weekly | **Fixed 2026-07-03** | Was named `"...TEMP AUTO-SEND thru 6/27"` and still actively auto-sending past its expiry as of 7/2. Reverted to draft-only (all three Gmail actions now create drafts, not sends) and renamed to `"GRMC Kids Korner — Thursday Confirm (Draft-Only)"`, matching the identical fix already applied to Order of Worship on 7/2. |
 | Save Kids Ministry Schedule | Webhook | Keep | — |
 | Breeze Directory Cache | Webhook | Keep, and **connect** | Should become the seed for Church OS's Breeze sync (see `02-data-flow.md`) |
 | Breeze People Search | Webhook | Keep, and **connect** | Same |
@@ -59,7 +59,7 @@ times.
 
 | Workflow | Trigger | Recommendation | Why |
 |---|---|---|---|
-| Apollos essay drafter (Substack) | Wed 9pm | **Merge (duplicate)** | Two versions found: `"GRMC Social — Apollos (ESSAY DRAFTER)"` and `"GRMC Apollos Essay Drafter"`, both active, both fire at the same time, both read the same seed Google Doc — almost certainly a migration leftover where the old version was never deactivated |
+| Apollos essay drafter (Substack) | Wed 9pm | **Merged 2026-07-03** | Two versions were active and racing: `"GRMC Social — Apollos (ESSAY DRAFTER)"` had Notion research enrichment but sent live email; `"GRMC Apollos Essay Drafter"` had daughter/Tiffany consent guardrails and correct draft-only behavior but no research step. Merged the guardrails and draft-only fix into the research-enriched workflow, deactivated the other. |
 | Substack Repurposer | On new essay | Keep | Approval-gated, working |
 | Tertius (Publisher via Postiz) | On approval | Keep | — |
 | Post Verification | Thu | Keep | — |
@@ -72,17 +72,20 @@ times.
 | Long-form YouTube Build | Manual + daily | Keep short-term | Calls an external Fly.io render worker — out of scope to replace |
 | Reels to YouTube | Daily | Keep short-term | Claude captions + approval-gated IG/FB posting |
 
-## Duplicate/racing workflows (flag for cleanup, not fixed this pass)
+## Duplicate/racing workflows (fixed 2026-07-03)
 
 1. **`"GRMC - Inbox Auto-Archive"`** (`3dhjecfpJIKspHn5`) and
-   **`"GRMC Inbox Auto-Archive"`** (`lNvS6XUWJ7d0Z6bS`) — both active,
-   both fire daily 6am Sun–Thu, near-identical Gmail archive logic (one
-   excludes important mail, the other excludes `@graceresurrection.org`
-   senders). **Merge** — running concurrently today is a real risk of
-   double-processing/race conditions on the same inbox.
+   **`"GRMC Inbox Auto-Archive"`** (`lNvS6XUWJ7d0Z6bS`) — were both
+   active, both firing daily 6am Sun–Thu, with different (not identical)
+   Gmail exclusion logic: one protected important-flagged mail, the
+   other protected `@graceresurrection.org` senders. **Fixed:** merged
+   both exclusions into `3dhjecfpJIKspHn5`'s query
+   (`-is:starred -is:important older_than:2d -from:graceresurrection.org`)
+   and deactivated `lNvS6XUWJ7d0Z6bS`.
 2. **`"GRMC Social — Apollos (ESSAY DRAFTER)"`** (`aaKMqRx8JHOFpoXe`) and
    **`"GRMC Apollos Essay Drafter"`** (`YqShTfy1qVySyktC`) — see above.
-   **Merge.**
+   **Fixed:** guardrails and draft-only behavior merged into
+   `aaKMqRx8JHOFpoXe`, `YqShTfy1qVySyktC` deactivated.
 
 ## Coverage gaps — credentials/tables with no matching workflow found
 
@@ -97,9 +100,11 @@ times.
 - `Household Notes` — **Investigate**: likely Helm/personal-KPI adjacent,
   needs clarification of what currently writes to it.
 
-## Immediate action items (recorded here, not executed this pass)
+## Immediate action items
 
-1. Fix or deactivate the Kids Korner "TEMP" auto-send.
-2. Deactivate one workflow in each of the two duplicate/racing pairs.
+1. ~~Fix or deactivate the Kids Korner "TEMP" auto-send.~~ **Done 2026-07-03.**
+2. ~~Deactivate one workflow in each of the two duplicate/racing pairs.~~ **Done 2026-07-03** (Inbox Auto-Archive: merged + deactivated; Apollos: merged + deactivated).
 3. Restore `search_workflows`/tag/project MCP access before relying on
-   any future n8n audit as complete.
+   any future n8n audit as complete — still outstanding; these three
+   fixes were applied via direct workflow-ID lookups, not a full-fleet
+   sweep.

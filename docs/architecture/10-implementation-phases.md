@@ -2,22 +2,42 @@
 
 Synthesizes `01`–`06`. Each phase ends with a stop for approval before
 the next begins, per the product charter's process and this session's
-own approved plan. Nothing beyond this documentation milestone has been
-started.
+own approved plan.
 
 ## Phase 0 — This milestone (done)
 
 Architecture documentation suite (`docs/architecture/*`,
 `docs/decisions/0015`). No code, schema, or n8n changes.
 
-## Phase 1 — Fix live n8n bugs (outside this repo, low risk, high urgency)
+## Phase 1 — Fix live n8n bugs (outside this repo, done 2026-07-03)
 
-Independent of the Taylor OS redesign — these are operational bugs found
-during the audit, not architecture work:
-1. Deactivate the stale Kids Korner "TEMP AUTO-SEND thru 6/27" workflow
-   or confirm/rename its continued auto-send intentionally.
-2. Deactivate one workflow in each duplicate/racing pair (Inbox
-   Auto-Archive x2, Apollos Essay Drafter x2).
+Independent of the Taylor OS redesign — these were operational bugs found
+during the audit, fixed directly in the live n8n instance (not this
+repo):
+1. **Kids Korner "TEMP AUTO-SEND thru 6/27"** (`fuzw9D2T6tfSsTuy`) —
+   confirmed it was still live and auto-sending as of 7/2, past its
+   stated window. Reverted all three Gmail actions to draft-only,
+   matching the identical fix already applied to the sibling Order of
+   Worship workflow on 7/2. Renamed to drop the stale "TEMP" label.
+2. **Inbox Auto-Archive duplicates** — the two workflows had genuinely
+   different protections (one excluded starred/important mail, the
+   other excluded church-domain mail), not identical logic. Merged both
+   exclusions into the original workflow (`3dhjecfpJIKspHn5`) and
+   deactivated the redundant copy (`lNvS6XUWJ7d0Z6bS`).
+3. **Apollos Essay Drafter duplicates** — also not identical: one had
+   richer Notion research enrichment, the other had consent guardrails
+   for content involving Taylor's daughter and Tiffany plus correct
+   draft-only behavior. Per Taylor's direction, merged the guardrails
+   and draft-only behavior into the research-enriched workflow
+   (`aaKMqRx8JHOFpoXe`) and deactivated the simpler duplicate
+   (`YqShTfy1qVySyktC`).
+
+All three fixes were published (not left as unpublished drafts) and
+verified live via direct workflow lookups. `search_workflows`/tag/
+project MCP tools remained blocked this session, so a full-fleet
+confirming sweep beyond these specific workflows was not possible —
+restoring that access is still recommended before treating the fleet as
+fully audited.
 3. Restore `search_workflows`/tag/project MCP access so future audits
    are complete, not execution-history reconstructions.
 
