@@ -1,28 +1,35 @@
 import { execSync } from "node:child_process";
-import { existsSync, unlinkSync } from "node:fs";
-import path from "node:path";
-
-const TEST_DB_PATH = path.resolve(__dirname, "prisma/test.db");
-const TEST_DATABASE_URL = `file:${TEST_DB_PATH}`;
+import { Client } from "pg";
 
 /**
- * Runs once before the whole test suite: pushes the schema to a throwaway
- * SQLite file so repository/service tests exercise a real database instead
- * of mocks, without touching the dev database. Vitest doesn't load .env by
- * default, so DATABASE_URL is set here via `test.env` in vitest.config.ts.
+ * Runs once before the whole test suite: fully resets a dedicated test
+ * Postgres database and pushes the schema fresh, so repository/service
+ * tests exercise a real database instead of mocks. `TEST_DATABASE_URL` must
+ * be a database distinct from your dev `DATABASE_URL` — the schema reset
+ * below (`DROP SCHEMA public CASCADE`) would otherwise destroy real dev
+ * data. Vitest doesn't load `.env` by default, so `vitest.config.ts`
+ * imports `dotenv/config` before this runs.
  */
 export default async function setup() {
-  if (existsSync(TEST_DB_PATH)) unlinkSync(TEST_DB_PATH);
+  const testDatabaseUrl = process.env.TEST_DATABASE_URL;
+  if (!testDatabaseUrl) {
+    throw new Error(
+      "TEST_DATABASE_URL is not set. Point it at a dedicated test Postgres database " +
+        "(never your dev database — this setup drops and recreates its schema on every run). See .env.example.",
+    );
+  }
 
-  execSync("npx prisma db push --accept-data-loss", {
+  const client = new Client({ connectionString: testDatabaseUrl });
+  await client.connect();
+  try {
+    await client.query('DROP SCHEMA IF EXISTS "public" CASCADE; CREATE SCHEMA "public";');
+  } finally {
+    await client.end();
+  }
+
+  execSync("npx prisma db push --accept-data-loss --skip-generate", {
     cwd: __dirname,
-    env: { ...process.env, DATABASE_URL: TEST_DATABASE_URL },
+    env: { ...process.env, DATABASE_URL: testDatabaseUrl },
     stdio: "inherit",
   });
-
-  return () => {
-    if (existsSync(TEST_DB_PATH)) unlinkSync(TEST_DB_PATH);
-    const journal = `${TEST_DB_PATH}-journal`;
-    if (existsSync(journal)) unlinkSync(journal);
-  };
 }

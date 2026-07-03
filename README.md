@@ -11,15 +11,21 @@ say — never exists twice.
 
 ## Tech stack
 
-TypeScript · Next.js (App Router) · Tailwind CSS · Prisma ORM · SQLite (dev)
-· Claude API (`@anthropic-ai/sdk`) · n8n (Messenger automation) · Vitest
+TypeScript · Next.js (App Router) · Tailwind CSS · Prisma ORM · PostgreSQL
+(Neon) · Claude API (`@anthropic-ai/sdk`) · n8n (Messenger automation) ·
+Vitest
 
 ## Getting started
 
+You need a Postgres database — a free [Neon](https://neon.tech) project's
+default branch works well and needs no local install. See
+`docs/decisions/0014-postgres-cutover-executed.md` for why Postgres is
+required even for local dev (this app has no SQLite fallback).
+
 ```bash
 npm install               # runs `prisma generate` via postinstall
-cp .env.example .env      # then fill in ANTHROPIC_API_KEY if you want AI features
-npm run db:migrate        # applies prisma/migrations to prisma/dev.db
+cp .env.example .env      # fill in DATABASE_URL (+ TEST_DATABASE_URL, a separate database — see below)
+npm run db:migrate        # applies prisma/migrations to your database
 npm run db:seed           # loads realistic sample data
 npm run dev                # http://localhost:3000
 ```
@@ -28,6 +34,34 @@ npm run dev                # http://localhost:3000
 the AI assistant, and the AI Chief of Staff briefing works without it —
 those return a `503` (or, for the briefing, a plain rule-based summary
 instead of prose) if it's missing.
+
+## Deploying (Vercel + Neon)
+
+1. In the [Vercel dashboard](https://vercel.com), import this repo as a new
+   project.
+2. In that project's **Storage** tab, create a Postgres database (Neon) —
+   Vercel wires its connection string into your project's environment
+   variables automatically. Use the **pooled** connection string variant
+   for `DATABASE_URL` (labeled as such in the dashboard) — Vercel's
+   serverless functions open a new connection per invocation, and the
+   pooled string is what keeps that from exhausting Postgres's connection
+   limit. See `docs/decisions/0014` for why.
+3. Add the remaining environment variables in **Settings → Environment
+   Variables**: `ANTHROPIC_API_KEY` (optional), `N8N_WEBHOOK_SECRET`
+   (optional), and `SITE_PASSWORD` (**do this** — see "Access control"
+   below; there's no per-user login system, so skipping this leaves real
+   business data open to anyone with the URL).
+4. Deploy. Vercel runs `npm install` (which runs `prisma generate`) and
+   `next build` automatically — but **migrations don't run as part of a
+   Vercel build**. Run `npx prisma migrate deploy` yourself once (from your
+   machine, with `DATABASE_URL` pointed at the same database) before the
+   first deploy, and again after any PR that adds a new migration.
+5. Optionally run `npm run db:seed` once (same `DATABASE_URL`) to load
+   sample data, or start from an empty database.
+
+Once it's live, visit the Vercel URL from your phone and laptop's browsers
+— no app install needed (you can add it to your phone's home screen for an
+app-like icon).
 
 ### Access control
 
@@ -108,7 +142,7 @@ route handlers (src/app/api/**)     server components (src/app/**/page.tsx)
                               |
                     prisma (src/lib/db/prisma.ts)
                               |
-                  SQLite (dev) — swappable for Postgres, see docs/decisions/0007
+                  PostgreSQL (Neon) — see docs/decisions/0007, 0014
 ```
 
 Core never holds a typed relation into a module's business logic — only the
@@ -119,9 +153,9 @@ Every non-obvious decision — why no native enums, why money is integer
 cents, why AI memory is an append-only log, why there's a Finance ledger
 instead of denormalized counters, why the matching engine gates on
 similarity before ranking, why the AI assistant only gets tool-use access
-instead of generating SQL, how a Postgres migration would work, the full
-old→new route map from the Marketplace CRM → Founder OS rebrand — is written
-up in `docs/decisions/`.
+instead of generating SQL, why/how the Postgres cutover happened and what
+that changed for local dev, the full old→new route map from the Marketplace
+CRM → Founder OS rebrand — is written up in `docs/decisions/`.
 
 ## Testing
 
@@ -134,11 +168,13 @@ similarity helpers, money formatting, and the AI extraction schema, plus
 `*.integration.test.ts` files that exercise the repository/service layers
 (matching engine, tag attachment, Marketplace sales, conversation ingestion
 with the AI call mocked, the append-only memory log, the Finance ledger,
-the module registry) against a real throwaway SQLite database
-(`prisma/test.db`, created fresh by `vitest.global-setup.ts`). These files
-share that one database, so `fileParallelism: false` avoids concurrent
-SQLite writers. The matching-engine integration test is what caught a real
-bug during development — see `docs/decisions/0004-matching-engine-design.md`.
+the module registry) against a real Postgres database — `TEST_DATABASE_URL`,
+reset fresh by `vitest.global-setup.ts` before every run. This **must** be a
+database separate from your dev `DATABASE_URL` (see .env.example) — the
+reset drops and recreates its schema. `fileParallelism: false` keeps test
+files from observing each other's in-flight writes to that shared database.
+The matching-engine integration test is what caught a real bug during
+development — see `docs/decisions/0004-matching-engine-design.md`.
 
 ## Project structure
 

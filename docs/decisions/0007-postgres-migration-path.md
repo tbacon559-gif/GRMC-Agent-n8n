@@ -1,12 +1,19 @@
 # 0007 — SQLite for dev, Postgres/Supabase migration path
 
-> **Update (Founder OS refactor):** everything below still holds — the
-> Founder OS schema (Core + every module) was written under the same
-> constraints from day one. One addition: Prisma 7's SQLite codegen renders
+> **Update (Founder OS refactor):** the Founder OS schema (Core + every
+> module) was written under the same portability constraints from day one.
+> One addition from that work: Prisma 7's SQLite codegen rendered
 > `Json @default(...)` as an unquoted (invalid) SQL literal, so every `Json`
-> column in the new schema omits `@default` and the owning repository
-> supplies an explicit value on `create()` instead — see the comment above
-> `Contact.customFields` in `prisma/schema.prisma`.
+> column omitted `@default` and the owning repository supplied an explicit
+> value on `create()` instead — see the comment above `Contact.customFields`
+> in `prisma/schema.prisma` (this is now moot on Postgres, but the pattern
+> was kept for consistency).
+>
+> **Update (Postgres cutover):** the move described below has since actually
+> happened, ahead of deploying to Vercel — see
+> `docs/decisions/0014-postgres-cutover-executed.md` for exactly what
+> changed (the adapter chosen, the migration-history reset, and the new
+> requirement that local dev/tests need a real Postgres connection too).
 
 ## Context
 

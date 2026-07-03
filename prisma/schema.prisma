@@ -9,12 +9,13 @@
 // Core/module boundary rule this schema follows (Core never holds a typed
 // relation *into* a module's business logic — only the reverse).
 //
-// Provider is SQLite for local dev; every modeling choice here is
-// deliberately Postgres-compatible (see docs/decisions/0007). No native
-// Prisma enums (unsupported on SQLite) — see docs/decisions/0003; every
-// "enum-like" field below is a validated string, with the allowed values
-// living in a single `enums.ts` per layer (src/core/constants/enums.ts,
-// src/modules/marketplace/constants/enums.ts).
+// Provider is PostgreSQL (Neon), per docs/decisions/0007 — the schema was
+// modeled from the start to be Postgres-compatible, so this was a
+// zero-schema-change cutover (see docs/decisions/0014). No native Prisma
+// enums (a holdover from the original SQLite constraint — see
+// docs/decisions/0003) — every "enum-like" field below is a validated
+// string, with the allowed values living in a single `enums.ts` per layer
+// (src/core/constants/enums.ts, src/modules/marketplace/constants/enums.ts).
 
 generator client {
   provider = "prisma-client"
@@ -22,7 +23,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 // =============================================================================
@@ -60,12 +61,11 @@ model Contact {
   /// history lives in ContactMemoryEntry. See
   /// docs/decisions/0009-ai-memory-append-only-log.md.
   aiSummaryCache     String?
-  /// No `@default("{}")` here: Prisma 7's SQLite codegen emits an unquoted
-  /// `DEFAULT {}`/`DEFAULT []` for Json field defaults, which SQLite
-  /// rejects (object literals) or silently mis-parses (array literals, via
-  /// SQLite's `[identifier]` bracket-quoting syntax). Every Json field in
-  /// this schema omits `@default` for that reason — the repository layer
-  /// always supplies an explicit value on create instead.
+  /// No `@default("{}")` here. This was originally forced by a Prisma 7
+  /// SQLite codegen bug (unquoted `DEFAULT {}`/`DEFAULT []`, invalid on
+  /// SQLite) — moot now that the datasource is PostgreSQL, but every Json
+  /// field in this schema still omits `@default` for consistency, since the
+  /// repository layer already always supplies an explicit value on create.
   customFields       Json
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
