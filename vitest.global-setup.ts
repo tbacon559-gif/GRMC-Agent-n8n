@@ -27,7 +27,7 @@ export default async function setup() {
     await client.end();
   }
 
-  execSync("npx prisma db push --accept-data-loss --skip-generate", {
+  execSync("npx prisma db push --accept-data-loss", {
     cwd: __dirname,
     env: { ...process.env, DATABASE_URL: testDatabaseUrl },
     stdio: "inherit",
