@@ -15,9 +15,21 @@ const STATUS_TONE = {
   sold: "positive",
   removed: "danger",
 } as const;
+const STATUSES = ["acquired", "listed", "pending", "sold", "removed"] as const;
 
-export default async function InventoryPage() {
-  const items = (await inventoryRepository.list({ take: 100 })).map(withProfit);
+interface PageProps {
+  searchParams: Promise<{ search?: string; status?: string }>;
+}
+
+export default async function InventoryPage({ searchParams }: PageProps) {
+  const { search, status } = await searchParams;
+  const items = (
+    await inventoryRepository.list({
+      take: 100,
+      search: search || undefined,
+      status: status && STATUSES.includes(status as (typeof STATUSES)[number]) ? (status as (typeof STATUSES)[number]) : undefined,
+    })
+  ).map(withProfit);
 
   return (
     <div className="flex flex-col gap-6">
@@ -30,6 +42,38 @@ export default async function InventoryPage() {
         </div>
         <NewInventoryForm />
       </div>
+
+      <form className="flex flex-wrap gap-2 text-sm" action="/inventory">
+        <input
+          name="search"
+          defaultValue={search}
+          placeholder="Search by title or description..."
+          className="min-w-64 rounded-md border border-slate-300 px-3 py-1.5 dark:border-slate-700 dark:bg-slate-800"
+        />
+        <select
+          name="status"
+          defaultValue={status ?? ""}
+          className="rounded-md border border-slate-300 px-3 py-1.5 dark:border-slate-700 dark:bg-slate-800"
+        >
+          <option value="">All statuses</option>
+          {STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+        <button
+          type="submit"
+          className="rounded-md border border-slate-300 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+        >
+          Filter
+        </button>
+        {(search || status) && (
+          <Link href="/inventory" className="self-center text-xs text-slate-500 hover:underline dark:text-slate-400">
+            Clear
+          </Link>
+        )}
+      </form>
 
       <Card>
         <CardBody className="overflow-x-auto p-0">

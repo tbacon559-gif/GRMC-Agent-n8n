@@ -13,10 +13,10 @@ import { findMatchesForInventoryItem } from "@/lib/services/matching.service";
  * issues pure unit tests can't — Prisma query shape mistakes, SQLite
  * feature gaps (no JSON filtering, no enums, no skipDuplicates), etc.
  *
- * This is the only test file in the suite that touches the database, so it
- * doesn't need to worry about concurrent-writer contention with other test
- * files on the same SQLite file — if more DB-backed test files are added,
- * either give each its own SQLite file or disable file parallelism.
+ * This file and the other `*.integration.test.ts` files share one SQLite
+ * file (`prisma/test.db`). SQLite only allows one writer at a time, so
+ * `fileParallelism: false` in vitest.config.ts keeps these test files from
+ * running concurrently and hitting SQLITE_BUSY.
  */
 describe("matching engine (integration)", () => {
   afterAll(async () => {

@@ -3,6 +3,7 @@ import { DollarSign, Clock, PackagePlus, Lightbulb } from "lucide-react";
 import { StatTile } from "@/components/ui/StatTile";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { ReminderActions } from "@/components/forms/ReminderActions";
 import { getDashboardData } from "@/lib/services/dashboard.service";
 import { formatCents } from "@/lib/money";
 
@@ -90,14 +91,17 @@ export default async function DashboardPage() {
           <CardBody className="flex flex-col gap-3">
             {data.followUpsDue.length === 0 && <EmptyState>Nothing overdue.</EmptyState>}
             {data.followUpsDue.map((reminder) => (
-              <div key={reminder.id} className="text-sm">
-                <Link
-                  href={`/customers/${reminder.customerId}`}
-                  className="font-medium text-slate-900 hover:underline dark:text-slate-50"
-                >
-                  {reminder.customer.name}
-                </Link>
-                <p className="text-slate-500 dark:text-slate-400">{reminder.note}</p>
+              <div key={reminder.id} className="flex items-start justify-between gap-3 text-sm">
+                <div>
+                  <Link
+                    href={`/customers/${reminder.customerId}`}
+                    className="font-medium text-slate-900 hover:underline dark:text-slate-50"
+                  >
+                    {reminder.customer.name}
+                  </Link>
+                  <p className="text-slate-500 dark:text-slate-400">{reminder.note}</p>
+                </div>
+                <ReminderActions reminderId={reminder.id} />
               </div>
             ))}
           </CardBody>

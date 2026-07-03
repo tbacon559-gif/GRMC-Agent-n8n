@@ -3,6 +3,8 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { AddNoteForm } from "@/components/forms/AddNoteForm";
 import { LogConversationForm } from "@/components/forms/LogConversationForm";
+import { ReminderActions } from "@/components/forms/ReminderActions";
+import { DeleteButton } from "@/components/forms/DeleteButton";
 import { customerRepository } from "@/lib/repositories/customer.repository";
 import { formatCents } from "@/lib/money";
 import { NotFoundError } from "@/lib/errors";
@@ -40,6 +42,11 @@ export default async function CustomerDetailPage({ params }: PageProps) {
             )}
           </div>
         </div>
+        <DeleteButton
+          url={`/api/customers/${customer.id}`}
+          redirectTo="/customers"
+          confirmMessage={`Delete ${customer.name}? This removes their notes, interests, and reminders too.`}
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -103,11 +110,14 @@ export default async function CustomerDetailPage({ params }: PageProps) {
             {customer.reminders
               .filter((r) => r.status === "pending")
               .map((reminder) => (
-                <div key={reminder.id} className="text-sm">
-                  <span className="text-slate-500 dark:text-slate-400">
-                    {new Date(reminder.dueAt).toLocaleDateString()}
-                  </span>{" "}
-                  — {reminder.note}
+                <div key={reminder.id} className="flex items-start justify-between gap-3 text-sm">
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400">
+                      {new Date(reminder.dueAt).toLocaleDateString()}
+                    </span>{" "}
+                    — {reminder.note}
+                  </div>
+                  <ReminderActions reminderId={reminder.id} />
                 </div>
               ))}
           </CardBody>

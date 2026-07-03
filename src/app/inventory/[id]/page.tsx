@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { RecordSaleForm } from "@/components/forms/RecordSaleForm";
+import { DeleteButton } from "@/components/forms/DeleteButton";
 import { inventoryRepository } from "@/lib/repositories/inventory.repository";
 import { matchRepository } from "@/lib/repositories/match.repository";
 import { customerRepository } from "@/lib/repositories/customer.repository";
@@ -45,6 +46,11 @@ export default async function InventoryDetailPage({ params }: PageProps) {
             )}
           </div>
         </div>
+        <DeleteButton
+          url={`/api/inventory/${item.id}`}
+          redirectTo="/inventory"
+          confirmMessage={`Delete "${item.title}"? This removes its match suggestions too.`}
+        />
       </div>
 
       {item.description && <p className="text-sm text-slate-700 dark:text-slate-300">{item.description}</p>}
