@@ -1,0 +1,70 @@
+{
+  "name": "Marketplace CRM - Messenger Conversation Ingest",
+  "meta": {
+    "description": "Forwards a Facebook Messenger conversation excerpt into the Marketplace CRM's AI extraction pipeline. Import this into your own n8n instance and configure the two placeholder values noted below.",
+    "instanceId": "example"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "messenger-conversation",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Messenger Forwarder Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "notes": "Receives whatever payload your Messenger-forwarding integration sends (e.g. a Meta App webhook relay, ManyChat, or a Make.com scenario). Expected fields: threadId, senderName, profileUrl, message."
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            { "name": "messengerThreadId", "value": "={{ $json.threadId }}", "type": "string" },
+            { "name": "customerName", "value": "={{ $json.senderName }}", "type": "string" },
+            { "name": "facebookProfileUrl", "value": "={{ $json.profileUrl }}", "type": "string" },
+            { "name": "rawText", "value": "={{ $json.message }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "shape-payload",
+      "name": "Shape payload for CRM",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-CRM-DEPLOYMENT/api/webhooks/n8n",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "x-n8n-webhook-secret", "value": "={{ $credentials.crmWebhookSecret }}" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "post-to-crm",
+      "name": "POST to CRM webhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300],
+      "notes": "Replace YOUR-CRM-DEPLOYMENT with your deployed app's host. Store the shared secret (matching N8N_WEBHOOK_SECRET in the CRM's .env) as an n8n credential rather than a literal string."
+    }
+  ],
+  "connections": {
+    "Messenger Forwarder Webhook": {
+      "main": [[{ "node": "Shape payload for CRM", "type": "main", "index": 0 }]]
+    },
+    "Shape payload for CRM": {
+      "main": [[{ "node": "POST to CRM webhook", "type": "main", "index": 0 }]]
+    }
+  }
+}

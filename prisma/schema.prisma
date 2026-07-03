@@ -1,0 +1,294 @@
+// Marketplace CRM — Prisma schema
+//
+// Provider is SQLite for local development. Every modeling choice here is
+// deliberately chosen to be Postgres-compatible so swapping the datasource
+// provider (and DATABASE_URL) is the only change needed to move to
+// Postgres/Supabase in production. See docs/decisions for the reasoning
+// behind the non-obvious choices (no native enums, money as integer cents,
+// derived values not stored, etc).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ---------------------------------------------------------------------------
+// Customers
+// ---------------------------------------------------------------------------
+
+/// A person the seller has interacted with on Marketplace: a buyer, a
+/// prospect who never converted, or someone the seller has sold to before.
+model Customer {
+  id String @id @default(cuid())
+
+  name               String
+  facebookProfileUrl String? @unique
+  messengerThreadId  String? @unique
+  phone              String?
+  email              String?
+
+  /// One of CUSTOMER_STATUSES (src/lib/constants/enums.ts). Not a native
+  /// Prisma enum — see docs/decisions/0003-no-native-enums-on-sqlite.md.
+  status String @default("prospect")
+
+  /// AI-maintained rolling summary of who this person is and what they care
+  /// about, refreshed as new conversations come in.
+  aiSummary String?
+
+  /// 0-100. Starts neutral and moves with confirmed sales vs. no-shows/flakes.
+  reliabilityScore Float @default(50)
+
+  /// 0-100. How quickly this customer tends to reply once contacted. Seeded
+  /// at a neutral value; intended to be refined once message-level timing
+  /// data is available (e.g. via the n8n Messenger integration).
+  responsivenessScore Float @default(50)
+
+  lastContactAt DateTime?
+
+  /// Denormalized counters, kept in sync by ordersService whenever a sale is
+  /// recorded. Safe to recompute from InventoryItem rows if they ever drift.
+  totalPurchases     Int @default(0)
+  lifetimeSpendCents Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tags          CustomerTag[]
+  notes         Note[]
+  conversations Conversation[]
+  interests     CustomerInterest[]
+  reminders     FollowUpReminder[]
+  purchases     InventoryItem[]    @relation("CustomerPurchases")
+  matches       MatchSuggestion[]
+
+  @@index([status])
+  @@index([lastContactAt])
+}
+
+model Tag {
+  id   String @id @default(cuid())
+  name String @unique
+
+  customers CustomerTag[]
+
+  createdAt DateTime @default(now())
+}
+
+/// Explicit join model (rather than an implicit m:n) so we can order tags,
+/// audit when they were applied, and query the join table directly.
+model CustomerTag {
+  customerId String
+  tagId      String
+  createdAt  DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  tag      Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([customerId, tagId])
+}
+
+/// Freeform, timestamped notes a seller leaves on a customer. Modeled as its
+/// own table (not a single text column) so history is preserved as notes
+/// accumulate over years of Marketplace activity.
+model Note {
+  id         String   @id @default(cuid())
+  customerId String
+  body       String
+  createdAt  DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+}
+
+// ---------------------------------------------------------------------------
+// Inventory
+// ---------------------------------------------------------------------------
+
+/// A product category. Normalized (rather than a free string) so the
+/// matching engine can do exact category joins instead of fuzzy string
+/// comparison, and so category names can be renamed in one place.
+model Category {
+  id   String @id @default(cuid())
+  name String @unique
+
+  items     InventoryItem[]
+  interests CustomerInterest[]
+
+  createdAt DateTime @default(now())
+}
+
+model InventoryItem {
+  id String @id @default(cuid())
+
+  title       String
+  description String?
+  categoryId  String?
+
+  acquisitionSource     String?
+  acquisitionCostCents  Int?
+  askingPriceCents      Int?
+  salePriceCents        Int?
+  marketplaceUrl        String?
+
+  dateListed DateTime?
+  dateSold   DateTime?
+  buyerId    String?
+
+  /// One of INVENTORY_STATUSES. See docs/decisions/0003.
+  status String @default("acquired")
+
+  /// Keyword bag used by the matching engine to compare this item against
+  /// open CustomerInterest rows (title/description tokens, plus anything an
+  /// AI extraction pass adds). Stored as JSON array of strings.
+  keywords Json @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  category Category?         @relation(fields: [categoryId], references: [id])
+  buyer    Customer?         @relation("CustomerPurchases", fields: [buyerId], references: [id])
+  matches  MatchSuggestion[]
+
+  // Deliberately no stored `profit` column: profit is
+  // salePriceCents - acquisitionCostCents, derived at read time in
+  // src/lib/services/inventory.service.ts so it can never drift from its
+  // inputs. See docs/decisions/0002-money-as-integer-cents.md.
+
+  @@index([status])
+  @@index([categoryId])
+  @@index([dateListed])
+}
+
+// ---------------------------------------------------------------------------
+// Conversation intelligence
+// ---------------------------------------------------------------------------
+
+/// One ingested chunk of conversation (typically a Messenger thread excerpt
+/// forwarded by the n8n automation). Raw text is retained for audit, but
+/// every feature in the app reads the structured columns below, never the
+/// raw text or the raw AI response — see
+/// docs/decisions/0005-ai-extraction-structured-storage.md.
+model Conversation {
+  id         String @id @default(cuid())
+  customerId String
+
+  /// One of CONVERSATION_SOURCES.
+  source     String   @default("messenger")
+  rawText    String
+  occurredAt DateTime @default(now())
+
+  // --- structured extraction (source of truth for app logic) ---
+  interestedItem  String?
+  requestedItems  Json    @default("[]")
+  budgetCents     Int?
+  budgetNote      String?
+  /// One of URGENCY_LEVELS.
+  urgency         String?
+  city            String?
+  /// One of BUYING_INTENT_LEVELS.
+  buyingIntent    String?
+  /// One of SENTIMENTS.
+  sentiment       String?
+  summary         String?
+
+  /// Which extraction model/version produced the structured fields above,
+  /// for auditability when we tune prompts later.
+  extractionModel String?
+  /// Raw AI response, retained only for debugging the extraction pipeline.
+  extractionRaw   Json?
+
+  createdAt DateTime @default(now())
+
+  customer  Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  interests CustomerInterest[]
+  reminders FollowUpReminder[]
+
+  @@index([customerId])
+  @@index([occurredAt])
+}
+
+/// A single "wants this kind of thing" signal for a customer, extracted from
+/// a conversation (or entered manually). This is what the matching engine
+/// scans whenever new inventory comes in.
+model CustomerInterest {
+  id             String  @id @default(cuid())
+  customerId     String
+  conversationId String?
+  categoryId     String?
+
+  itemDescription String
+  keywords        Json    @default("[]")
+  budgetCents     Int?
+
+  /// One of INTEREST_STATUSES.
+  status String @default("open")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  category     Category?     @relation(fields: [categoryId], references: [id])
+
+  @@index([status])
+  @@index([categoryId])
+  @@index([customerId])
+}
+
+model FollowUpReminder {
+  id             String  @id @default(cuid())
+  customerId     String
+  conversationId String?
+
+  dueAt DateTime
+  note  String
+
+  /// One of REMINDER_STATUSES.
+  status String @default("pending")
+
+  createdAt DateTime @default(now())
+
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([dueAt])
+}
+
+// ---------------------------------------------------------------------------
+// Matching engine output
+// ---------------------------------------------------------------------------
+
+/// A persisted "you should contact this person about this item"
+/// recommendation, produced by the matching engine whenever inventory is
+/// added. Persisting (rather than recomputing on every dashboard load) lets
+/// us track which suggestions were acted on.
+model MatchSuggestion {
+  id              String @id @default(cuid())
+  inventoryItemId String
+  customerId      String
+
+  /// 0-100 overall score.
+  score Float
+  /// Named sub-scores + human-readable reasons, e.g.
+  /// { similarity: 82, buyingHistory: 40, recency: 90, responsiveness: 60,
+  ///   reliability: 75, reasons: ["Bought a similar espresso machine in Feb"] }
+  breakdown Json
+
+  /// One of MATCH_STATUSES.
+  status String @default("suggested")
+
+  createdAt DateTime @default(now())
+
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  customer      Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([inventoryItemId, customerId])
+  @@index([status])
+  @@index([score])
+}
