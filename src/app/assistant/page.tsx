@@ -8,7 +8,7 @@ const EXAMPLE_QUESTIONS = [
   "Who wanted a KitchenAid mixer?",
   "Who buys kitchen appliances?",
   "What items sell fastest?",
-  "Which buyers respond the quickest?",
+  "Which contacts respond the quickest?",
 ];
 
 interface Answer {
@@ -50,7 +50,7 @@ export default function AssistantPage() {
       <div>
         <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">AI Assistant</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Ask about customers, inventory, and sales in plain English.
+          Ask about contacts, inventory, and sales across every business, in plain English.
         </p>
       </div>
 

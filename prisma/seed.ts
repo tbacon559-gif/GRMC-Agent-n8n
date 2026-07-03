@@ -1,12 +1,21 @@
 import "dotenv/config";
 import { prisma } from "@/lib/db/prisma";
-import { categoryRepository } from "@/lib/repositories/category.repository";
-import { customerRepository } from "@/lib/repositories/customer.repository";
-import { inventoryRepository } from "@/lib/repositories/inventory.repository";
-import { interestRepository } from "@/lib/repositories/interest.repository";
-import { reminderRepository } from "@/lib/repositories/reminder.repository";
-import { conversationRepository } from "@/lib/repositories/conversation.repository";
-import { findMatchesForInventoryItem } from "@/lib/services/matching.service";
+import { contactRepository } from "@/core/repositories/contact.repository";
+import { taskRepository } from "@/core/repositories/task.repository";
+import { financeRepository } from "@/core/repositories/finance.repository";
+import { memoryRepository } from "@/core/repositories/memory.repository";
+import { marketplaceCategoryRepository } from "@/modules/marketplace/repositories/marketplace-category.repository";
+import { marketplaceItemRepository } from "@/modules/marketplace/repositories/marketplace-item.repository";
+import { marketplaceConversationRepository } from "@/modules/marketplace/repositories/marketplace-conversation.repository";
+import { marketplaceInterestRepository } from "@/modules/marketplace/repositories/marketplace-interest.repository";
+import { marketplaceProfileRepository } from "@/modules/marketplace/repositories/marketplace-profile.repository";
+import { recordMarketplaceSale } from "@/modules/marketplace/services/marketplace-item.service";
+import { findMatchesForInventoryItem } from "@/modules/marketplace/services/matching.service";
+import { lawnCareClientRepository } from "@/modules/lawn-care/repositories/lawn-care-client.repository";
+import { publishingProjectRepository } from "@/modules/publishing/repositories/publishing-project.repository";
+import { gameStudioProjectRepository } from "@/modules/game-studio/repositories/game-studio-project.repository";
+import { aiProductProjectRepository } from "@/modules/ai-products/repositories/ai-product-project.repository";
+import { churchProjectRepository } from "@/modules/church-projects/repositories/church-project.repository";
 
 function daysAgo(n: number): Date {
   const d = new Date();
@@ -23,58 +32,58 @@ function daysFromNow(n: number): Date {
 async function main() {
   console.log("Seeding database...");
 
-  const kitchen = await categoryRepository.findOrCreateByName("Kitchen Appliances");
-  const patio = await categoryRepository.findOrCreateByName("Patio & Outdoor");
-  const furniture = await categoryRepository.findOrCreateByName("Furniture");
-  const fitness = await categoryRepository.findOrCreateByName("Fitness Equipment");
+  await prisma.founder.create({
+    data: { name: "Taylor Bacon", email: "taylor.bacon@graceresurrection.org" },
+  });
 
-  const jordan = await customerRepository.create({
+  const kitchen = await marketplaceCategoryRepository.findOrCreateByName("Kitchen Appliances");
+  const patio = await marketplaceCategoryRepository.findOrCreateByName("Patio & Outdoor");
+  const furniture = await marketplaceCategoryRepository.findOrCreateByName("Furniture");
+  const fitness = await marketplaceCategoryRepository.findOrCreateByName("Fitness Equipment");
+
+  // Jordan is the concrete proof of "people exist once, businesses attach":
+  // one Contact who is simultaneously a Marketplace repeat buyer AND a Lawn
+  // Care client, with no duplicate person record.
+  const jordan = await contactRepository.create({
     name: "Jordan Lee",
     facebookProfileUrl: "https://facebook.com/jordan.lee.example",
     phone: "555-0101",
-    status: "buyer",
     tags: ["repeat-buyer"],
   });
-  await customerRepository.update(jordan.id, {
-    reliabilityScore: 90,
-    responsivenessScore: 85,
+  await marketplaceProfileRepository.updateScores(jordan.id, { reliabilityScore: 90, responsivenessScore: 85 });
+  await contactRepository.touchLastContact(jordan.id, daysAgo(2));
+  await lawnCareClientRepository.create({
+    contactId: jordan.id,
+    propertyAddress: "123 Maple St",
+    serviceFrequency: "biweekly",
+    nextServiceAt: daysFromNow(5),
   });
-  await customerRepository.touchLastContact(jordan.id, daysAgo(2));
 
-  const sam = await customerRepository.create({
+  const sam = await contactRepository.create({
     name: "Sam Patel",
     facebookProfileUrl: "https://facebook.com/sam.patel.example",
-    status: "prospect",
   });
-  await customerRepository.touchLastContact(sam.id, daysAgo(10));
+  await contactRepository.touchLastContact(sam.id, daysAgo(10));
 
-  const casey = await customerRepository.create({
+  const casey = await contactRepository.create({
     name: "Casey Morgan",
     facebookProfileUrl: "https://facebook.com/casey.morgan.example",
-    status: "prospect",
     tags: ["hot-lead"],
   });
-  await customerRepository.update(casey.id, { responsivenessScore: 70 });
-  await customerRepository.touchLastContact(casey.id, daysAgo(3));
+  await marketplaceProfileRepository.updateScores(casey.id, { responsivenessScore: 70 });
+  await contactRepository.touchLastContact(casey.id, daysAgo(3));
 
-  const riley = await customerRepository.create({
-    name: "Riley Chen",
-    status: "buyer",
-  });
-  await customerRepository.update(riley.id, { responsivenessScore: 25, reliabilityScore: 55 });
-  await customerRepository.touchLastContact(riley.id, daysAgo(20));
+  const riley = await contactRepository.create({ name: "Riley Chen" });
+  await marketplaceProfileRepository.updateScores(riley.id, { responsivenessScore: 25, reliabilityScore: 55 });
+  await contactRepository.touchLastContact(riley.id, daysAgo(20));
 
-  const taylor = await customerRepository.create({
-    name: "Taylor Brooks",
-    status: "prospect",
-    tags: ["vip"],
-  });
-  await customerRepository.addNote(
-    taylor.id,
+  const morgan = await contactRepository.create({ name: "Morgan Reyes", tags: ["vip"] });
+  await contactRepository.addNote(
+    morgan.id,
     "Interested in flipping furniture together sometime — follow up in the fall.",
   );
 
-  const mixer = await inventoryRepository.create({
+  const mixer = await marketplaceItemRepository.create({
     title: "KitchenAid Stand Mixer - Refurbished",
     description: "Classic tilt-head stand mixer, fully refurbished, ships with paddle + whisk.",
     category: kitchen.name,
@@ -83,15 +92,10 @@ async function main() {
     askingPriceCents: 12000,
     keywords: ["kitchenaid", "stand mixer", "kitchen appliance", "baking"],
   });
-  await inventoryRepository.markListed(mixer.id, daysAgo(20));
-  await inventoryRepository.recordSale(mixer.id, {
-    buyerId: jordan.id,
-    salePriceCents: 12000,
-    dateSold: daysAgo(15),
-  });
-  await customerRepository.recordPurchase(jordan.id, 12000);
+  await marketplaceItemRepository.markListed(mixer.id, daysAgo(20));
+  await recordMarketplaceSale(mixer.id, { contactId: jordan.id, salePriceCents: 12000, dateSold: daysAgo(15) });
 
-  const patioSet = await inventoryRepository.create({
+  const patioSet = await marketplaceItemRepository.create({
     title: "Outdoor Patio Set (4-piece)",
     description: "Wicker patio set with cushions, seats 4, minor wear.",
     category: patio.name,
@@ -100,9 +104,9 @@ async function main() {
     askingPriceCents: 30000,
     keywords: ["patio set", "outdoor furniture", "patio", "wicker"],
   });
-  await inventoryRepository.markListed(patioSet.id, daysAgo(10));
+  await marketplaceItemRepository.markListed(patioSet.id, daysAgo(10));
 
-  const sofa = await inventoryRepository.create({
+  const sofa = await marketplaceItemRepository.create({
     title: "Mid-century Sofa",
     description: "3-seat mid-century modern sofa, walnut legs.",
     category: furniture.name,
@@ -110,15 +114,10 @@ async function main() {
     askingPriceCents: 25000,
     keywords: ["sofa", "couch", "furniture", "mid-century"],
   });
-  await inventoryRepository.markListed(sofa.id, daysAgo(40));
-  await inventoryRepository.recordSale(sofa.id, {
-    buyerId: riley.id,
-    salePriceCents: 25000,
-    dateSold: daysAgo(35),
-  });
-  await customerRepository.recordPurchase(riley.id, 25000);
+  await marketplaceItemRepository.markListed(sofa.id, daysAgo(40));
+  await recordMarketplaceSale(sofa.id, { contactId: riley.id, salePriceCents: 25000, dateSold: daysAgo(35) });
 
-  const espresso = await inventoryRepository.create({
+  const espresso = await marketplaceItemRepository.create({
     title: "Espresso Machine",
     description: "Semi-automatic espresso machine with steam wand, barely used.",
     category: kitchen.name,
@@ -127,7 +126,7 @@ async function main() {
     keywords: ["espresso machine", "coffee", "kitchen appliance"],
   });
 
-  const treadmill = await inventoryRepository.create({
+  const treadmill = await marketplaceItemRepository.create({
     title: "Treadmill - Folding",
     description: "Folding treadmill, works great, just needs space.",
     category: fitness.name,
@@ -135,10 +134,10 @@ async function main() {
     askingPriceCents: 15000,
     keywords: ["treadmill", "fitness", "exercise equipment"],
   });
-  await inventoryRepository.markListed(treadmill.id, daysAgo(60));
+  await marketplaceItemRepository.markListed(treadmill.id, daysAgo(60));
 
-  const samConversation = await conversationRepository.create({
-    customer: { connect: { id: sam.id } },
+  const samConversation = await marketplaceConversationRepository.create({
+    contact: { connect: { id: sam.id } },
     source: "messenger",
     rawText:
       "Hey, do you still have that KitchenAid mixer? Looking for one for my daughter, budget around $100.",
@@ -152,23 +151,25 @@ async function main() {
     summary: "Sam is looking for a KitchenAid stand mixer as a gift, budget around $100.",
     extractionModel: "seed-data",
   });
-  await interestRepository.create({
-    customerId: sam.id,
+  await marketplaceInterestRepository.create({
+    contactId: sam.id,
     conversationId: samConversation.id,
     categoryId: kitchen.id,
     itemDescription: "KitchenAid stand mixer",
     keywords: ["kitchenaid", "stand mixer", "kitchen appliance"],
     budgetCents: 10000,
   });
-  await reminderRepository.create({
-    customerId: sam.id,
-    conversationId: samConversation.id,
+  await taskRepository.create({
+    title: "Follow up with Sam — let them know if another KitchenAid mixer comes in.",
+    module: "marketplace",
+    contactId: sam.id,
     dueAt: daysAgo(1),
-    note: "Follow up with Sam — let them know if another KitchenAid mixer comes in.",
+    sourceType: "MarketplaceConversation",
+    sourceId: samConversation.id,
   });
 
-  const caseyConversation = await conversationRepository.create({
-    customer: { connect: { id: casey.id } },
+  const caseyConversation = await marketplaceConversationRepository.create({
+    contact: { connect: { id: casey.id } },
     source: "messenger",
     rawText:
       "Looking for a patio set for the backyard, 4 people, before summer starts. Budget is $300. I'm in Denver.",
@@ -183,27 +184,37 @@ async function main() {
     summary: "Casey wants a 4-piece patio set before summer, budget $300, based in Denver.",
     extractionModel: "seed-data",
   });
-  await interestRepository.create({
-    customerId: casey.id,
+  await marketplaceInterestRepository.create({
+    contactId: casey.id,
     conversationId: caseyConversation.id,
     categoryId: patio.id,
     itemDescription: "patio set",
     keywords: ["patio set", "outdoor furniture", "patio"],
     budgetCents: 30000,
   });
-  await reminderRepository.create({
-    customerId: casey.id,
-    conversationId: caseyConversation.id,
+  await taskRepository.create({
+    title: "Send Casey photos of the patio set once cushions are cleaned.",
+    module: "marketplace",
+    contactId: casey.id,
     dueAt: daysFromNow(2),
-    note: "Send Casey photos of the patio set once cushions are cleaned.",
+    sourceType: "MarketplaceConversation",
+    sourceId: caseyConversation.id,
   });
-  await customerRepository.updateAiSummary(
+  await contactRepository.updateAiSummaryCache(
     casey.id,
     "Casey wants a 4-piece patio set before summer, budget $300, based in Denver.",
   );
+  await memoryRepository.create({
+    contactId: casey.id,
+    module: "marketplace",
+    kind: "fact",
+    content: "Based in Denver, wants a 4-piece patio set before summer, budget $300, pickup only.",
+    sourceType: "MarketplaceConversation",
+    sourceId: caseyConversation.id,
+  });
 
-  const jordanConversation = await conversationRepository.create({
-    customer: { connect: { id: jordan.id } },
+  const jordanConversation = await marketplaceConversationRepository.create({
+    contact: { connect: { id: jordan.id } },
     source: "messenger",
     rawText: "Loved the mixer! Do you ever get espresso machines in? I'd grab one if the price is right.",
     occurredAt: daysAgo(2),
@@ -216,25 +227,69 @@ async function main() {
     summary: "Jordan is a happy repeat customer, casually interested in an espresso machine if the price is right.",
     extractionModel: "seed-data",
   });
-  await interestRepository.create({
-    customerId: jordan.id,
+  await marketplaceInterestRepository.create({
+    contactId: jordan.id,
     conversationId: jordanConversation.id,
     categoryId: kitchen.id,
     itemDescription: "espresso machine",
     keywords: ["espresso machine", "coffee", "kitchen appliance"],
     budgetCents: 9000,
   });
-  await customerRepository.updateAiSummary(
+  await contactRepository.updateAiSummaryCache(
     jordan.id,
     "Jordan is a happy repeat customer, casually interested in an espresso machine if the price is right.",
   );
+  await memoryRepository.create({
+    contactId: jordan.id,
+    kind: "preference",
+    content: "Prefers texting over calls; usually responds within a few hours.",
+    sourceType: "MarketplaceConversation",
+    sourceId: jordanConversation.id,
+  });
+
+  // Tasks spanning every scope the universal task system supports: founder-
+  // level (no module, no contact), module-level (module set, no contact),
+  // and contact-level (already seeded above for Sam and Casey).
+  await taskRepository.create({ title: "Renew business insurance", priority: "high", dueAt: daysFromNow(14) });
+  await taskRepository.create({
+    title: "Restock packing tape and boxes",
+    module: "marketplace",
+    dueAt: daysFromNow(3),
+  });
+
+  // A founder-level Finance entry not attributable to any one module.
+  await financeRepository.create({
+    type: "expense",
+    amountCents: 2000,
+    category: "software",
+    description: "Founder OS hosting",
+    occurredAt: daysAgo(5),
+    recurring: true,
+  });
+
+  // One row per stub module — proves each can own its own table and appear
+  // in nav/dashboard/assistant without touching Core.
+  await publishingProjectRepository.create({
+    title: "Founder OS Launch Newsletter #1",
+    status: "drafting",
+    platform: "Substack",
+  });
+  await gameStudioProjectRepository.create({ title: "Pixel Farm Sim", status: "concept" });
+  await aiProductProjectRepository.create({ name: "Client Onboarding Bot", status: "idea" });
+  await churchProjectRepository.create({
+    title: "Vacation Bible School Planning",
+    status: "planning",
+    dueAt: daysFromNow(30),
+  });
 
   // Run the matching engine for the still-open listings, same as the API
   // does automatically whenever new inventory is created.
   const patioMatches = await findMatchesForInventoryItem(patioSet.id);
   const espressoMatches = await findMatchesForInventoryItem(espresso.id);
 
-  console.log(`Seeded ${await prisma.customer.count()} customers, ${await prisma.inventoryItem.count()} inventory items.`);
+  console.log(
+    `Seeded ${await prisma.contact.count()} contacts, ${await prisma.marketplaceItem.count()} marketplace items, ${await prisma.task.count()} tasks, ${await prisma.financeTransaction.count()} finance transactions.`,
+  );
   console.log(`Patio set matches: ${patioMatches.length}, espresso machine matches: ${espressoMatches.length}`);
 }
 

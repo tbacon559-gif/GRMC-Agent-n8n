@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
-export function AddNoteForm({ customerId }: { customerId: string }) {
+export function AddNoteForm({ contactId }: { contactId: string }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
 
@@ -11,7 +11,7 @@ export function AddNoteForm({ customerId }: { customerId: string }) {
     event.preventDefault();
     setSubmitting(true);
     const form = new FormData(event.currentTarget);
-    await fetch(`/api/customers/${customerId}/notes`, {
+    await fetch(`/api/contacts/${contactId}/notes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ body: form.get("body") }),

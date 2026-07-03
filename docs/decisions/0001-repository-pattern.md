@@ -1,5 +1,13 @@
 # 0001 — Repository pattern between routes and Prisma
 
+> **Update (Founder OS refactor, see 0012):** the repository pattern described
+> below is unchanged, but repositories now live under `src/core/repositories/`
+> (Contact, Tag, Note, Task, Finance, Memory, Calendar, Document,
+> Notification) and `src/modules/<module>/repositories/` (e.g.
+> `src/modules/marketplace/repositories/`), not a single flat
+> `src/lib/repositories/`. Business-logic services moved the same way, into
+> `src/core/services/` and `src/modules/<module>/services/`.
+
 ## Context
 
 Every entity (customers, inventory, conversations, interests, reminders,

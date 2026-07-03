@@ -7,14 +7,19 @@ import { z } from "zod";
  * request handler.
  *
  * `ANTHROPIC_API_KEY` is intentionally optional: every non-AI feature
- * (customers, inventory, matching, dashboard) must keep working without it.
+ * (contacts, marketplace, matching, dashboard) must keep working without it.
  * AI-dependent services check `hasAnthropicApiKey` themselves and throw a
  * typed `AIServiceUnavailableError` when it's missing.
+ *
+ * `SITE_PASSWORD` is also optional (see `src/middleware.ts`): unset means no
+ * password gate, which is fine for local dev but must be set before
+ * deploying to a public URL, since there is no per-user login system.
  */
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   ANTHROPIC_API_KEY: z.string().optional(),
   N8N_WEBHOOK_SECRET: z.string().optional(),
+  SITE_PASSWORD: z.string().optional(),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
 });
 

@@ -1,5 +1,13 @@
 # 0002 — Money as integer cents, profit computed not stored
 
+> **Update (Founder OS refactor):** `InventoryItem`/`Customer` are now
+> `MarketplaceItem`/`Contact`; `withProfit` lives in
+> `src/modules/marketplace/services/marketplace-item.service.ts`. Per-item
+> profit is still never stored — see 0011 for how this same "derive, don't
+> store what can drift" principle now also applies one level up, to
+> cross-module revenue/profit via the `FinanceTransaction` ledger replacing
+> `Customer.lifetimeSpendCents`.
+
 ## Context
 
 The app tracks acquisition cost, asking price, and sale price per item, plus

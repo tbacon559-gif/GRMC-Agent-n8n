@@ -1,5 +1,15 @@
 # 0008 — n8n integration: webhook contract, not a provisioned workflow
 
+> **Update (Founder OS refactor):** the route path (`POST
+> /api/webhooks/n8n`) and its request body field names (including
+> `customerName`) are kept exactly as they were — this is an external
+> contract the n8n workflow JSON hardcodes, so it is deliberately *not*
+> renamed even though the customer it identifies/creates is now a Core
+> `Contact` and the conversation pipeline lives at
+> `src/modules/marketplace/services/marketplace-conversation.service.ts`.
+> See 0013 for the full old→new route map and what was intentionally left
+> unchanged.
+
 ## Context
 
 The spec lists n8n as part of the stack for integration — in practice, the

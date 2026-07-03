@@ -4,12 +4,12 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 /**
- * PATCH /api/customers/:id treats `tags` as a full replacement of the
- * customer's tag set (see customerRepository#update ->
- * tagRepository#replaceCustomerTags), so adding one tag means sending the
+ * PATCH /api/contacts/:id treats `tags` as a full replacement of the
+ * contact's tag set (see contactRepository#update ->
+ * tagRepository#replaceContactTags), so adding one tag means sending the
  * existing set plus the new name, not just the new name.
  */
-export function AddTagForm({ customerId, existingTags }: { customerId: string; existingTags: string[] }) {
+export function AddTagForm({ contactId, existingTags }: { contactId: string; existingTags: string[] }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
 
@@ -20,7 +20,7 @@ export function AddTagForm({ customerId, existingTags }: { customerId: string; e
     if (!newTag) return;
 
     setSubmitting(true);
-    await fetch(`/api/customers/${customerId}`, {
+    await fetch(`/api/contacts/${contactId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tags: [...existingTags, newTag] }),
