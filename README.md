@@ -31,7 +31,7 @@ clear message if it's missing.
 | `npm run build` / `start` | Production build / serve |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint |
-| `npm test` / `test:watch` | Vitest (unit + one DB-integration file) |
+| `npm test` / `test:watch` | Vitest (unit + integration tests) |
 | `npm run db:migrate` | Apply Prisma migrations |
 | `npm run db:seed` | Seed sample customers/inventory/conversations |
 | `npm run db:studio` | Prisma Studio (browse the DB) |
@@ -48,6 +48,7 @@ clear message if it's missing.
 | Dashboard | `src/lib/services/dashboard.service.ts`, `src/app/page.tsx` |
 | AI assistant (NL Q&A) | `src/lib/ai/assistant.ts` (Claude tool-use over `src/lib/services/analytics.service.ts`), `/assistant` |
 | n8n integration | `POST /api/webhooks/n8n`, example workflow in `n8n/workflows/` |
+| Code quality / CI | Repository + service layering, Zod validation everywhere, `.github/workflows/ci.yml` runs typecheck/lint/test/build on every push |
 
 ## Architecture
 
@@ -76,11 +77,13 @@ npm test
 
 Runs Vitest: pure unit tests for the matching engine's scoring math, the
 similarity helpers, money formatting, and the AI extraction schema, plus
-one integration test file (`matching.integration.test.ts`) that exercises
-the repository + matching-engine layers against a real throwaway SQLite
-database (`prisma/test.db`, created fresh by `vitest.global-setup.ts` and
-deleted after). That integration test is what caught a real bug during
-development — see `docs/decisions/0004-matching-engine-design.md`.
+`*.integration.test.ts` files that exercise the repository/service layers
+(matching engine, tag attachment, inventory sales, conversation ingestion
+with the AI call mocked) against a real throwaway SQLite database
+(`prisma/test.db`, created fresh by `vitest.global-setup.ts`). These files
+share that one database, so `fileParallelism: false` avoids concurrent
+SQLite writers. The matching-engine integration test is what caught a real
+bug during development — see `docs/decisions/0004-matching-engine-design.md`.
 
 ## Project structure
 
